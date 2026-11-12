@@ -112,24 +112,21 @@ def cursor_events(d, t):
             return "error", {"text": json.dumps(d)[:600]}
         return "done", {"usage": usage, "final": d.get("result") or ""}
     return None, None
-def muse_setup(tag):
-    """A fresh HOME per run (no user AGENTS.md, skills, memories or MCP settings), wiped first so a retry never
-    inherits the failed attempt's state, with the sign-in copied in (muse ignores linked credentials) and only
-    Library/Keychains linked, because the actual secret sits in the Keychain."""
-    home = PRIVATE / "muse-homes" / tag
-    shutil.rmtree(home, ignore_errors=True)
+def muse_setup(tag, ws):
+    """A fresh HOME per run under the same macOS sandbox profile as agy and Cursor (the rest of the disk, /tmp and
+    other runs hidden), with the sign-in copied in (muse ignores linked credentials) and every bundled skill off."""
+    home = AGY_HOMES / tag
+    shutil.rmtree(home, ignore_errors=True)       # a retry never inherits the failed attempt's state
+    home, prof = agy_setup(tag, ws, links=[])
     (home / ".config/muse").mkdir(parents=True, exist_ok=True)
-    (home / "Library").mkdir(exist_ok=True)
-    home.chmod(0o700)
-    real = pathlib.Path.home()
-    shutil.copy(real / ".config/muse/auth.json", home / ".config/muse/auth.json")
-    os.symlink(real / "Library/Keychains", home / "Library/Keychains")
-    return home
+    shutil.copy(pathlib.Path.home() / ".config/muse/auth.json", home / ".config/muse/auth.json")
+    shutil.copy(ROOT / "bench/muse_settings.json", home / ".config/muse/settings.json")
+    return home, prof
 
 
 def muse_drop(home):
-    for rel in ["Library/Keychains", ".config/muse/auth.json"]:
-        (home / rel).unlink(missing_ok=True)
+    (home / ".config/muse/auth.json").unlink(missing_ok=True)
+    agy_drop(home)
 
 
 def muse_events(d, t):
@@ -563,17 +560,18 @@ def main():
                 "--model", f"{MODELS[a.model]}-{a.effort}", "--output-format", "stream-json", "--force", "--trust",
                 "--sandbox", "disabled", "--workspace", str(ws), "Read TASK.md in this folder and do the task."]
     if mus:
-        # a fresh HOME (no user rules, skills, memories or MCP servers), Muse's own sandbox with the shell's
-        # network restricted (a sandbox-exec wrapper cannot nest, same as Cursor), web tools and reminder
-        # agents off, commands audited below like the other translated runners
-        home = muse_setup(f"{cfg}__{name}")
-        env = {"PATH": os.environ["PATH"], "HOME": str(home), "LANG": "en_US.UTF-8"}
+        # a fresh HOME (no user rules, skills, memories or MCP servers) inside the shared sandbox profile; Muse's own
+        # sandbox is off because it cannot nest, as with Cursor. Web tools and reminder agents off, commands audited.
+        # Contributor mode on: Adam's standing choice for Muse benchmark runs.
+        home, prof = muse_setup(f"{cfg}__{name}", ws)
+        env = {"PATH": os.environ["PATH"], "HOME": str(home), "TMPDIR": str(home / "tmp"), "TMPPREFIX": str(home / "tmp/zsh"), "LANG": "en_US.UTF-8"}
         # a mise shim cannot resolve under the fresh HOME (its config is untrusted there); run the install directly
         muse_bin = pathlib.Path.home() / ".local/share/mise/installs/muse/latest/muse"
-        argv = [str(muse_bin) if muse_bin.exists() else "muse", "exec", "--json", "--workspace", str(ws), "--model", MODELS[a.model], "--effort", a.effort,
+        muse_bin = muse_bin if muse_bin.exists() else pathlib.Path.home() / ".local/bin/muse"
+        argv = ["sandbox-exec", "-f", str(prof), str(muse_bin), "exec", "--json", "--workspace", str(ws), "--model", MODELS[a.model], "--effort", a.effort,
                 "--trust-workspace", "--disable-approval", "--disable-request-user-input", "--disable-web-tools",
-                "--disable-reminders", "--no-foreign-personal-context", "--contributor-mode", "off",
-                "--sandbox-network", "restricted", "Read TASK.md in this folder and do the task."]
+                "--disable-reminders", "--no-foreign-personal-context", "--contributor-mode", "on",
+                "--disable-sandbox", "Read TASK.md in this folder and do the task."]
     t0, started = time.time(), time.strftime("%Y-%m-%dT%H:%M:%S%z")
     threading.Thread(target=serve, daemon=True).start()
     def pump(proc):
@@ -712,7 +710,7 @@ def main():
               "final_message": final[-2000:],
               "harness": {"cli": "agy " + sh(str(pathlib.Path.home() / ".local/bin/agy"), "--version") if agy else
                           "cursor-agent " + sh(str(pathlib.Path.home() / ".local/bin/cursor-agent"), "--version") if cur else
-                          sh(argv[0], "--version") if mus else sh("codex", "--version"), "git": sh("git", "rev-parse", "--short", "HEAD"),
+                          sh(str(muse_bin), "--version") if mus else sh("codex", "--version"), "git": sh("git", "rev-parse", "--short", "HEAD"),
                           "git_dirty": bool(sh("git", "status", "--porcelain", "bench", "tasks")), "minecraft": "26.3 vanilla"}}
     if best:
         shutil.copy(out / "attempts" / f"{best['attempt']:03d}.json", out / "best.json")

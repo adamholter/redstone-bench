@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "skills": {
+    "activation": {
+      "bundled": {
+        "bundled://muse-core/skills/browser-app-delivery/SKILL.md": "off",
+        "bundled://muse-core/skills/create-plugin/SKILL.md": "off",
+        "bundled://muse-core/skills/create-skill/SKILL.md": "off",
+        "bundled://muse-core/skills/doctor/SKILL.md": "off",
+        "bundled://muse-core/skills/durable-test-collateral/SKILL.md": "off",
+        "bundled://muse-core/skills/git/SKILL.md": "off",
+        "bundled://muse-core/skills/greenfield-project-scaffolding/SKILL.md": "off",
+        "bundled://muse-core/skills/grill/SKILL.md": "off",
+        "bundled://muse-core/skills/import/SKILL.md": "off",
+        "bundled://muse-core/skills/manage-settings/SKILL.md": "off",
+        "bundled://muse-core/skills/migrate/SKILL.md": "off",
+        "bundled://muse-core/skills/plan/SKILL.md": "off",
+        "bundled://muse-core/skills/python-env/SKILL.md": "off",
+        "bundled://muse-core/skills/read-session/SKILL.md": "off",
+        "bundled://muse-core/skills/requirements-clarification/SKILL.md": "off",
+        "bundled://muse-core/skills/resume-claude/SKILL.md": "off",
+        "bundled://muse-core/skills/resume-codex/SKILL.md": "off",
+        "bundled://muse-core/skills/table-fit/SKILL.md": "off",
+        "bundled://muse-core/skills/taste/SKILL.md": "off",
+        "bundled://muse-core/skills/workflow-authoring/SKILL.md": "off"
+      },
+      "plugin": {
+        "plugin://threejs/skills/threejs/SKILL.md": "off"
+      }
+    }
+  }
+}
