@@ -21,9 +21,12 @@ from verify import verify
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MODELS = {"sol": "gpt-6.1-sol", "terra": "gpt-6.1-terra", "astra": "gpt-6-astra", "luna": "gpt-6-luna",
-          "carbon": "gemini-4-carbon", "grok": "grok-4.7"}
+          "carbon": "gemini-4-carbon", "grok": "grok-4.7",
+          "wonder-full": "muse-wonder-full-1.0", "wonder": "muse-wonder-1.0", "ember": "muse-ember-1.0",
+          "spark13": "muse-spark-1.3", "spark12": "muse-spark-1.2"}
 AGY = {"carbon"}                       # these run through the Antigravity CLI (agy) instead of Codex
 CURSOR = {"grok"}                      # these run through the Cursor CLI (cursor-agent)
+MUSE = {"wonder-full", "wonder", "ember", "spark13", "spark12"}   # these run through the Muse CLI (muse exec)
 AGY_HOMES = pathlib.Path("/private/tmp/rsb-agy-homes")
 AGY_LINKS = ["antigravity-cli/antigravity-oauth-token", "antigravity-cli/installation_id", "oauth_creds.json",
              "google_accounts.json", "installation_id"]
@@ -108,6 +111,50 @@ def cursor_events(d, t):
         if d.get("is_error") or d.get("subtype") != "success":
             return "error", {"text": json.dumps(d)[:600]}
         return "done", {"usage": usage, "final": d.get("result") or ""}
+    return None, None
+def muse_setup(tag):
+    """A fresh HOME per run (no user AGENTS.md, skills, memories or MCP settings), wiped first so a retry never
+    inherits the failed attempt's state, with the sign-in copied in (muse ignores linked credentials) and only
+    Library/Keychains linked, because the actual secret sits in the Keychain."""
+    home = PRIVATE / "muse-homes" / tag
+    shutil.rmtree(home, ignore_errors=True)
+    (home / ".config/muse").mkdir(parents=True, exist_ok=True)
+    (home / "Library").mkdir(exist_ok=True)
+    home.chmod(0o700)
+    real = pathlib.Path.home()
+    shutil.copy(real / ".config/muse/auth.json", home / ".config/muse/auth.json")
+    os.symlink(real / "Library/Keychains", home / "Library/Keychains")
+    return home
+
+
+def muse_drop(home):
+    for rel in ["Library/Keychains", ".config/muse/auth.json"]:
+        (home / rel).unlink(missing_ok=True)
+
+
+def muse_events(d, t):
+    """Muse's exec --json event stream as the same (kind, payload) the other runners give. Usage arrives as
+    its own event before the terminal one, so "done" carries no usage and "usage" is its own kind."""
+    p = d.get("payload") or {}
+    pt = d.get("payload_type") or ""
+    if pt == "tool.result":
+        name = (p.get("correlation_facts") or {}).get("tool_name") or "tool"
+        text = p.get("text") or ""
+        cmd = ""
+        try:
+            cmd = json.loads(text).get("command") or ""
+        except Exception:
+            pass
+        return "command", {"command": str(cmd or f"[{name}] " + text[:200].replace("\n", " ")), "tool": name, "output": text[:300]}
+    if pt == "run.usage":
+        ms = p.get("models") or [{}]
+        tot = lambda k: sum(m.get(k) or 0 for m in ms)
+        return "usage", {"usage": {"input_tokens": tot("input_tokens"), "cached_input_tokens": tot("cached_tokens"),
+                                   "output_tokens": tot("output_tokens"), "reasoning_output_tokens": tot("reasoning_tokens")}}
+    if pt.startswith("run.terminal"):
+        if p.get("terminal") == "completed":
+            return "done", {"usage": None, "final": p.get("text") or ""}
+        return "error", {"text": json.dumps(p)[:600]}
     return None, None
 
 
@@ -481,13 +528,17 @@ def main():
     PRIVATE.chmod(0o700)
     CODEX_HOME.mkdir(exist_ok=True)
     AGENT_HOME.mkdir(exist_ok=True)
-    if not (CODEX_HOME / "auth.json").exists():
-        os.symlink(pathlib.Path.home() / ".codex/auth.json", CODEX_HOME / "auth.json")
+    if not (CODEX_HOME / "auth.json").exists():      # parallel workers race to create this; losing is fine
+        try:
+            os.symlink(pathlib.Path.home() / ".codex/auth.json", CODEX_HOME / "auth.json")
+        except FileExistsError:
+            pass
     env = {"PATH": os.environ["PATH"], "HOME": str(AGENT_HOME), "CODEX_HOME": str(CODEX_HOME), "LANG": "en_US.UTF-8"}
     agy = a.model in AGY
     cur = a.model in CURSOR
-    sx = agy or cur                      # sandboxed runners with a translated event stream
-    events = agy_events if agy else cursor_events
+    mus = a.model in MUSE
+    sx = agy or cur or mus               # sandboxed runners with a translated event stream
+    events = muse_events if mus else agy_events if agy else cursor_events
     argv = ["codex", "exec", "-m", MODELS[a.model], "-c", f'model_reasoning_effort="{a.effort}"',
             "-c", 'web_search="disabled"', "-c", 'approval_policy="never"',
             *[x for f in ("plugins", "apps", "memories", "image_generation") for x in ("--disable", f)],
@@ -511,6 +562,18 @@ def main():
         argv = ["sandbox-exec", "-f", str(prof), str(pathlib.Path.home() / ".local/bin/cursor-agent"), "-p",
                 "--model", f"{MODELS[a.model]}-{a.effort}", "--output-format", "stream-json", "--force", "--trust",
                 "--sandbox", "disabled", "--workspace", str(ws), "Read TASK.md in this folder and do the task."]
+    if mus:
+        # a fresh HOME (no user rules, skills, memories or MCP servers), Muse's own sandbox with the shell's
+        # network restricted (a sandbox-exec wrapper cannot nest, same as Cursor), web tools and reminder
+        # agents off, commands audited below like the other translated runners
+        home = muse_setup(f"{cfg}__{name}")
+        env = {"PATH": os.environ["PATH"], "HOME": str(home), "LANG": "en_US.UTF-8"}
+        # a mise shim cannot resolve under the fresh HOME (its config is untrusted there); run the install directly
+        muse_bin = pathlib.Path.home() / ".local/share/mise/installs/muse/latest/muse"
+        argv = [str(muse_bin) if muse_bin.exists() else "muse", "exec", "--json", "--workspace", str(ws), "--model", MODELS[a.model], "--effort", a.effort,
+                "--trust-workspace", "--disable-approval", "--disable-request-user-input", "--disable-web-tools",
+                "--disable-reminders", "--no-foreign-personal-context", "--contributor-mode", "off",
+                "--sandbox-network", "restricted", "Read TASK.md in this folder and do the task."]
     t0, started = time.time(), time.strftime("%Y-%m-%dT%H:%M:%S%z")
     threading.Thread(target=serve, daemon=True).start()
     def pump(proc):
@@ -530,7 +593,10 @@ def main():
                         state["commands"] += 1
                         state["timeline"].append({"t": t, "kind": "command_execution", "step": state["commands"], "command": x["command"][:240], "tool": x["tool"]})
                     elif k == "error":
+                        # a translated runner's error is its terminal event (provider quota, auth, crash):
+                        # a harness failure to retry, never a scored model result
                         state["errors"].append(x["text"])
+                        state["fault"] = "provider ended the run: " + x["text"][:200]
                     continue
                 item = d.get("item") or {}
                 kind = d.get("type", "")
@@ -545,8 +611,13 @@ def main():
                         ev["text"] = str(item.get("text", ""))[:400]
                     state["timeline"].append(ev)
 
-    proc = subprocess.Popen(argv, cwd=ws, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, start_new_session=True)
+    try:
+        proc = subprocess.Popen(argv, cwd=ws, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, start_new_session=True)
+    except Exception:
+        if mus:
+            muse_drop(home)     # never leave the copied sign-in behind in a home no run will clean
+        raise
     (out / "codex.pid").write_text(str(proc.pid))
     pumper = threading.Thread(target=pump, args=(proc,), daemon=True)
     pumper.start()
@@ -563,7 +634,7 @@ def main():
     time.sleep(1)
     state["stop"] = True
 
-    usage, final, commands, outside = {}, "", 0, []
+    usage, final, commands, outside, saw_done = {}, "", 0, [], False
     for line in (out / "transcript.jsonl").read_text(errors="replace").splitlines():
         try:
             d = json.loads(line)
@@ -571,12 +642,23 @@ def main():
             continue
         if sx:
             k, x = events(d, 0)
-            if k == "done":
-                usage, final = x["usage"], x["final"]
+            if k == "error" and not state.get("fault"):
+                state["fault"] = "provider ended the run: " + x["text"][:200]
+            elif k == "usage":
+                usage = x["usage"]
+            elif k == "done":
+                saw_done = True
+                usage, final = x["usage"] or usage, x["final"]
             elif k == "command":
                 commands += 1
                 c = x["command"].replace(str(ws), ".").replace(str(home), "$HOME")
-                if any(w in c for w in ("/Users/", "~/", "redstone-bench", "redstonepedia", "rsb-work", "rsb-agy", "/tmp/", "/var/folders") + NETWORK_WORDS):
+                hay = c
+                if mus:
+                    # Muse's stream carries no tool arguments, so scan the output head too: a file tool's
+                    # output names the path it read, and Muse tools can read outside the workspace
+                    hay = c + " " + x["output"].replace(str(ws), ".").replace(str(home), "$HOME")[:1000]
+                if any(w in hay for w in ("/Users/", "~/", "redstone-bench", "redstonepedia", "rsb-work", "rsb-agy", "/tmp/",
+                                          "/var/folders", "baselines/", "seeds/", ".rcon_password", "/runs/") + NETWORK_WORDS):
                     outside.append(c[:300])
             continue
         item = d.get("item") or {}
@@ -590,10 +672,14 @@ def main():
             if any(x in c for x in ("/Users/", "~/", ".codex", "redstone-bench", "redstonepedia", "/tmp/", "/var/folders")):
                 outside.append(c[:300])
     (out / "timeline.json").write_text(json.dumps(state["timeline"]))
-    if sx:
+    if mus:
+        muse_drop(home)
+    elif sx:
         agy_drop(home)
     if agy and "blocked by Gemini's filters" in final:     # the provider cut the run off; not a model result
         state["fault"] = "provider safety filter ended the run"
+    if mus and ended == "finished" and not saw_done and not state.get("fault"):
+        state["fault"] = "CLI exited without a completed terminal event"   # crash after the usage event
     if shutil.disk_usage(out).free < 1 << 30:
         state["fault"] = state.get("fault") or "disk nearly full during the run"
     if state.get("fault"):
@@ -625,7 +711,8 @@ def main():
               "attempt_log": log, "usage": usage, "shell_commands": commands, "cli_errors": state["errors"][-5:], "commands_touching_outside": outside,
               "final_message": final[-2000:],
               "harness": {"cli": "agy " + sh(str(pathlib.Path.home() / ".local/bin/agy"), "--version") if agy else
-                          "cursor-agent " + sh(str(pathlib.Path.home() / ".local/bin/cursor-agent"), "--version") if cur else sh("codex", "--version"), "git": sh("git", "rev-parse", "--short", "HEAD"),
+                          "cursor-agent " + sh(str(pathlib.Path.home() / ".local/bin/cursor-agent"), "--version") if cur else
+                          sh(argv[0], "--version") if mus else sh("codex", "--version"), "git": sh("git", "rev-parse", "--short", "HEAD"),
                           "git_dirty": bool(sh("git", "status", "--porcelain", "bench", "tasks")), "minecraft": "26.3 vanilla"}}
     if best:
         shutil.copy(out / "attempts" / f"{best['attempt']:03d}.json", out / "best.json")

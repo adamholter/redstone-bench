@@ -28,8 +28,9 @@ BLURB = {
     "time_clock120": "The lamp turns on once every 120 ticks, exactly.",
     "time_pulse30": "The lamp lights for exactly 30 ticks, once.",
 }
-MODELS = {"sol": "GPT-6.1 Sol", "terra": "GPT-6.1 Terra", "astra": "GPT-6 Astra", "luna": "GPT-6 Luna", "carbon": "Gemini 4 Carbon", "grok": "Grok 4.7"}
-EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"]
+MODELS = {"sol": "GPT-6.1 Sol", "terra": "GPT-6.1 Terra", "astra": "GPT-6 Astra", "luna": "GPT-6 Luna", "carbon": "Gemini 4 Carbon", "grok": "Grok 4.7",
+          "wonder-full": "Muse Wonder Full 1.0", "wonder": "Muse Wonder 1.0", "ember": "Muse Ember 1.0", "spark13": "Muse Spark 1.3", "spark12": "Muse Spark 1.2"}
+EFFORTS = ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
 
 
 def title(task):
