@@ -36,7 +36,10 @@ A new runner must:
 - add the model id to `MODELS` (short key -> CLI model id) and the display name to `bench/export_site.py`;
 - start the agent in the scratch workspace with the single prompt `Read TASK.md in this folder and do the task.`;
 - give it **no network and no files outside the workspace** (sandbox it, deny the tools, audit the commands into
-  `commands_touching_outside`), no memories, skills, plugins or MCP servers;
+  `commands_touching_outside`), no memories, skills, plugins or MCP servers. That includes `/tmp` and
+  `/private/var/folders`: other agents (including other runs of this bench) leave scripts there, so hide them and give
+  the agent its own `TMPDIR`. Before submitting, grep every transcript for paths in `/tmp` that are not the run's own;
+  a run that read another run's files is void;
 - record token usage, the CLI version and the final message; map the CLI's event stream into the same
   `command` / `done` / `error` events `agy_events` produces, so the timeline and step counts work;
 - treat provider failures (quota, auth, safety filters, crashes) as harness errors: write `error.json`, exit 3,

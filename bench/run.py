@@ -51,15 +51,20 @@ def agy_setup(tag, ws, links=AGY_LINKS):
             os.symlink(src, home / rel)
     lit = " ".join(f'(literal "{real}/.gemini/{f}")' for f in links)
     prof = home / "sandbox.sb"
+    # /private/tmp and the per-user temp folders hold other agents' scratch files (including other runs' scripts)
+    # and private files, so they are hidden too; the agent gets its own TMPDIR inside its home
+    shared = '(subpath "/private/tmp") (subpath "/private/var/folders")'
     prof.write_text(f'''(version 1)
 (allow default)
-(deny file-read* (subpath "{real}") (subpath "{WORK}") (subpath "{AGY_HOMES}"))
-(allow file-read-metadata (subpath "{real}") (subpath "{WORK}") (subpath "{AGY_HOMES}"))
+(deny file-read* (subpath "{real}") {shared})
+(allow file-read-metadata (subpath "{real}") {shared})
 (allow file-read* (subpath "{real}/Library") (subpath "{real}/.local") {lit} (subpath "{home}") (subpath "{ws}"))
-(deny file-write* (subpath "{real}") (subpath "{WORK}") (subpath "{AGY_HOMES}"))
+(deny file-write* (subpath "{real}") {shared})
+(allow file-read* file-write* (regex #"^/private/var/folders/[^/]+/[^/]+/T/xcrun_db"))
 (allow file-write* (subpath "{home}") (subpath "{ws}") (subpath "{real}/Library/Caches") (subpath "{real}/Library/Logs")
   (subpath "{real}/Library/Application Support") (subpath "{real}/.local/share"))
 ''')
+    (home / "tmp").mkdir(exist_ok=True)
     return home, prof
 
 
@@ -502,7 +507,7 @@ def main():
         (home / ".cursor").mkdir(exist_ok=True)
         (home / ".cursor/cli-config.json").write_text(json.dumps({"version": 1, "permissions": {
             "allow": ["Shell(*)", "Read(**)", "Write(**)"], "deny": ["WebFetch(*)", "WebSearch(*)", "Mcp(*:*)"]}}))
-        env = {"PATH": os.environ["PATH"], "HOME": str(home), "LANG": "en_US.UTF-8"}
+        env = {"PATH": os.environ["PATH"], "HOME": str(home), "TMPDIR": str(home / "tmp"), "TMPPREFIX": str(home / "tmp/zsh"), "LANG": "en_US.UTF-8"}
         argv = ["sandbox-exec", "-f", str(prof), str(pathlib.Path.home() / ".local/bin/cursor-agent"), "-p",
                 "--model", f"{MODELS[a.model]}-{a.effort}", "--output-format", "stream-json", "--force", "--trust",
                 "--sandbox", "disabled", "--workspace", str(ws), "Read TASK.md in this folder and do the task."]
@@ -570,8 +575,8 @@ def main():
                 usage, final = x["usage"], x["final"]
             elif k == "command":
                 commands += 1
-                c = x["command"].replace(str(ws), ".")
-                if any(w in c for w in ("/Users/", "~/", "redstone-bench", "redstonepedia", "rsb-work", "rsb-agy") + NETWORK_WORDS):
+                c = x["command"].replace(str(ws), ".").replace(str(home), "$HOME")
+                if any(w in c for w in ("/Users/", "~/", "redstone-bench", "redstonepedia", "rsb-work", "rsb-agy", "/tmp/", "/var/folders") + NETWORK_WORDS):
                     outside.append(c[:300])
             continue
         item = d.get("item") or {}
@@ -581,8 +586,8 @@ def main():
             final = item.get("text", "")
         if d.get("type") == "item.completed" and item.get("type") == "command_execution":
             commands += 1
-            c = str(item.get("command", ""))
-            if any(x in c for x in ("/Users/", "~/", ".codex", "redstone-bench", "redstonepedia")):
+            c = str(item.get("command", "")).replace(str(ws), ".")
+            if any(x in c for x in ("/Users/", "~/", ".codex", "redstone-bench", "redstonepedia", "/tmp/", "/var/folders")):
                 outside.append(c[:300])
     (out / "timeline.json").write_text(json.dumps(state["timeline"]))
     if sx:
