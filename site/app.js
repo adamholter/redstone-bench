@@ -26,15 +26,16 @@
   const cfgName = (c) => `${c.model.replace("GPT-", "")} ${c.effort}`;
   const cfg = Object.fromEntries(d.configs.map((c) => [c.id, c]));
   const mkey = (c) => c.id.split("-")[0];
-  const short = (c) => c.model.split(" ").pop();
+  const short = (c) => { const w = c.model.split(" "); return /^[\d.]+$/.test(w.at(-1)) ? w[0] : w.at(-1); };   // "GPT-6 Astra" -> Astra, "Grok 4.7" -> Grok
   const models = [...new Set(d.configs.map(mkey))];
   const modelName = Object.fromEntries(d.configs.map((c) => [mkey(c), short(c)]));
   // one colour and one shape per model, so colour is never the only cue
-  const MK = { sol: ["#2a78d6", "circle"], terra: ["#1baf7a", "square"], astra: ["#e34948", "tri"], luna: ["#eda100", "diamond"], carbon: ["#b0308f", "pent"] };
+  const MK = { sol: ["#2a78d6", "circle"], terra: ["#1baf7a", "square"], astra: ["#e34948", "tri"], luna: ["#eda100", "diamond"], carbon: ["#b0308f", "pent"], grok: ["#3a3ab8", "hex"] };
   const glyph = (k, x, y, r, extra = {}) => {
     const [fill, sh] = MK[k] || ["#8f9da8", "circle"], a = { fill, stroke: "#fff", "stroke-width": 1.5, ...extra };
     if (sh === "circle") return svg("circle", { cx: x, cy: y, r, ...a });
     if (sh === "square") return svg("rect", { x: x - r * 0.9, y: y - r * 0.9, width: r * 1.8, height: r * 1.8, rx: 1.5, ...a });
+    if (sh === "hex") return svg("path", { d: [0, 1, 2, 3, 4, 5].map((i) => `${i ? "L" : "M"}${x + r * 1.15 * Math.cos((i * Math.PI) / 3)},${y + r * 1.15 * Math.sin((i * Math.PI) / 3)}`).join("") + "Z", ...a });
     if (sh === "pent") return svg("path", { d: [0, 1, 2, 3, 4].map((i) => `${i ? "L" : "M"}${x + r * 1.2 * Math.sin((i * 2 * Math.PI) / 5)},${y - r * 1.2 * Math.cos((i * 2 * Math.PI) / 5)}`).join("") + "Z", ...a });
     if (sh === "tri") return svg("path", { d: `M${x},${y - r * 1.15}L${x + r * 1.1},${y + r * 0.85}H${x - r * 1.1}Z`, ...a });
     return svg("path", { d: `M${x},${y - r * 1.25}L${x + r * 1.25},${y}L${x},${y + r * 1.25}L${x - r * 1.25},${y}Z`, ...a });
