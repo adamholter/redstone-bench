@@ -22,7 +22,7 @@ CONFIGS = ([("sol", e) for e in E6] + [("terra", e) for e in E6] + [("astra", e)
            [("luna", e) for e in E6[:5]])      # Luna has no ultra
 if os.environ.get("RSB_CONFIGS"):                                   # e.g. RSB_CONFIGS=carbon-high
     CONFIGS = [tuple(c.rsplit("-", 1)) for c in os.environ["RSB_CONFIGS"].split(",")]
-BUDGET, MINUTES, WORKERS, RETRIES = 40, 60, int(os.environ.get("RSB_WORKERS", 12)), 4
+BUDGET, MINUTES, WORKERS, RETRIES = 40, 60, int(os.environ.get("RSB_WORKERS", 12)), int(os.environ.get("RSB_RETRIES", 4))
 
 
 def tasks():
@@ -110,7 +110,8 @@ def run_one(m, e, t, lock):
                 led.write(json.dumps({"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "job": name, "try": attempt, "exit": code}) + "\n")
         if (rdir(m, e, t) / "result.json").exists():
             return
-        time.sleep(600 if code == 3 else 30)     # quota or auth trouble: wait before trying again
+        if attempt < RETRIES:
+            time.sleep(600 if code == 3 else 30)     # quota or auth trouble: wait before trying again
     (B / "gave_up" / name).write_text(time.strftime("%Y-%m-%dT%H:%M:%S"))
 
 
