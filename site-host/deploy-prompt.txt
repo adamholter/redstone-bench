@@ -1,0 +1,9 @@
+Use the installed Sites skill to publish an UPDATE to an EXISTING static Site. Adam asked for this; no further approval is needed.
+
+- Publishing checkout: /Users/adam/Projects/redstone-bench/site-host (this folder; its own git repo with .openai/hosting.json, project_id appgprj_6af37b7255ac8191a1df85b1eb863aba, static directory dist). Live URL https://redstone-bench.adamholter.chatgpt.site, audience public. Keep the SAME project and the public audience. Do not create a new Site.
+- dist/ has just been rebuilt with new data. Do NOT change, rebuild or delete anything in dist/, and do not run sync.sh. Make sure every file in dist/ is in the package (the parent repo's .gitignore ignores site-host/dist/; this folder's own repo must include it).
+- Package with no build commands, save a new version, deploy that exact version, confirm with get_site.
+- Verify: <url>/data/index.json must contain the string "grok-high" and list 28 entries under "configs", and <url>/index.html must contain the text "Contributed, in progress: Muse Wonder Full".
+- Never commit or push the parent repo. Do not open visible browser windows. Never print credentials.
+
+Final answer: exactly one JSON line: {"ok":true|false,"url":"...","version":"...","audience":"...","configs":N,"notes":"..."}

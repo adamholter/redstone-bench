@@ -83,7 +83,7 @@ model settings with every task run. It publishes nothing. `site/icons.mjs` makes
 A run that loses the judge (server down for over four minutes) or runs out of disk is thrown out and retried by the batch.
 
 Public site: https://redstone-bench.adamholter.chatgpt.site (ChatGPT Sites project `appgprj_6af37b7255ac8191a1df85b1eb863aba`, public).
-Redeploy: export, render, `bash site-host/sync.sh`, then a Codex agent with the Sites plugin republishes `site-host/dist`
+Redeploy: export, render, `bash site-host/sync.sh`, then a Codex agent (prompt: `site-host/deploy-prompt.txt`, run with `codex exec -m gpt-6-luna -C site-host -`) with the Sites plugin republishes `site-host/dist`
 to that same project (`site-host` is its own git checkout with `.openai/hosting.json`).
 
 ## Contributing

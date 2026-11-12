@@ -123,3 +123,11 @@ details p{white-space:pre-wrap;color:var(--soft);margin:8px 0 0}
 .legend span{display:inline-flex;align-items:center}
 .legend .key i{width:22px;height:2px;background:var(--ink);margin-right:7px}
 .legend .faded i{width:9px;height:9px;border-radius:50%;background:#8f9da8;opacity:.55;margin-right:7px}
+#contrib{margin-top:18px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
+#contrib .sub{font-size:14px;margin-bottom:10px}
+#contrib a{color:var(--ink);font-weight:600}
+table.mini{border-collapse:collapse;font-size:14px;width:100%;max-width:420px}
+table.mini th{font-weight:600;color:var(--soft);text-align:left;padding:6px 12px 6px 0;border-bottom:1px solid var(--line)}
+table.mini td{padding:7px 12px 7px 0;border-bottom:1px solid var(--line)}
+table.mini td+td,table.mini th+th{text-align:right;white-space:nowrap}
+#contrib .charthead a{white-space:nowrap}
