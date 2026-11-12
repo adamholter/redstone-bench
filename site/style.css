@@ -112,7 +112,8 @@ details p{white-space:pre-wrap;color:var(--soft);margin:8px 0 0}
   dialog{height:calc(100dvh - 12px);width:calc(100vw - 12px)}.sheet{grid-template-columns:1fr;grid-template-rows:46dvh auto;overflow:auto}.info{overflow:visible;padding:16px}.facts{grid-template-columns:repeat(2,auto)}.runs .m{display:none}.player select{display:none}}
 @media(prefers-reduced-motion:reduce){.tile{transition:none}html{scroll-behavior:auto}}
 .player[hidden]{display:none}
-.tabs{display:inline-flex;margin-top:16px;background:#e3edf3}
+.tabs{display:inline-flex;margin-top:16px;background:#e3edf3;max-width:100%;overflow-x:auto;scrollbar-width:none}
+.tabs button{flex:none}
 .tabs[hidden]{display:none}
 .tabs+.scroll{margin-top:10px}
 .sw{vertical-align:-1px;margin-right:7px}
