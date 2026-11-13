@@ -1,0 +1,71 @@
+---- Minecraft Crash Report ----
+// This is a token for 1 free hug. Redeem at your nearest Mojangsta: [~~HUG~~]
+
+Time: 2026-11-13 01:31:28
+Description: Exception in server tick loop
+
+java.lang.ArrayIndexOutOfBoundsException: Index -48 out of bounds for length 100
+	at net.minecraft.server.MinecraftServer.tickServer(MinecraftServer.java:996)
+	at net.minecraft.server.dedicated.DedicatedServer.tickServer(DedicatedServer.java:278)
+	at net.minecraft.server.MinecraftServer.processPacketsAndTick(MinecraftServer.java:1013)
+	at net.minecraft.server.MinecraftServer.runServer(MinecraftServer.java:752)
+	at net.minecraft.server.MinecraftServer.lambda$spin$0(MinecraftServer.java:310)
+	at java.base/java.lang.Thread.run(Thread.java:1527)
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- System Details --
+Details:
+	Minecraft Version: 26.3
+	Minecraft Version ID: 26.3
+	Operating System: Mac OS X (aarch64) version 27.0
+	Java Version: 27.0.1.0.3, Homebrew
+	Java VM Version: OpenJDK 64-Bit Server VM (mixed mode, sharing), Homebrew
+	Memory: 17846408 bytes (17 MiB) / 138412032 bytes (132 MiB) up to 1073741824 bytes (1024 MiB)
+	Memory (heap): init: 008MiB, used: 114MiB, committed: 132MiB, max: 1024MiB
+	Memory (non-heap): init: 007MiB, used: 125MiB, committed: 148MiB, max: 000MiB
+	CPUs: 10
+	Processor Vendor: Apple Inc.
+	Processor Name: Apple M4
+	Identifier: Apple Inc. Family 0x1b588bb3 Model 0 Stepping 0
+	Microarchitecture: ARM64 SoC: Firestorm + Icestorm
+	Frequency (GHz): 0.00
+	Number of physical packages: 1
+	Number of physical CPUs: 10
+	Number of logical CPUs: 10
+	Graphics card #0 name: Apple M4
+	Graphics card #0 vendor: Apple (0x106b)
+	Graphics card #0 VRAM (MiB): 0.00
+	Graphics card #0 deviceId: unknown
+	Graphics card #0 versionInfo: unknown
+	Memory slot #0 capacity (MiB): 0.00
+	Memory slot #0 clockSpeed (GHz): 0.00
+	Memory slot #0 type: unknown
+	Virtual memory max (MiB): 25600.00
+	Virtual memory used (MiB): 19909.89
+	Swap memory total (MiB): 9216.00
+	Swap memory used (MiB): 8492.44
+	Space in storage for jna.tmpdir (MiB): <path not set>
+	Space in storage for org.lwjgl.system.SharedLibraryExtractPath (MiB): <path not set>
+	Space in storage for io.netty.native.workdir (MiB): <path not set>
+	Space in storage for java.io.tmpdir (MiB): available: 243401.50, total: 1902788.38
+	Space in storage for workdir (MiB): available: 243401.52, total: 1902788.38
+	Operating System Version: Apple macOS 27.0 build 26A5406e
+	Process Elevated: false
+	Process Loads: Uptime: 214765s, user: 11156s (5.19%), kernel: 7179s (3.34%), total: 18335s (8.54%)
+	Process Virtual Size (MiB): 480162.06
+	Process Resident Size (MiB): 289.22
+	JVM Flags: 1 total; -Xmx1G
+	Debug Flags: 0 total; 
+	Server Running: true
+	Player Count: 0 / 1; []
+	Active Data Packs: vanilla, file/rsb
+	Available Data Packs: file/rsb, minecart_improvements, redstone_experiments, trade_rebalance, vanilla
+	Enabled Feature Flags: minecraft:vanilla
+	World Generation: Stable
+	World Seed: -8442209187426364289
+	Suppressed Exceptions: ~~NONE~~
+	Is Modded: Probably not. Server jar signature and brand is untouched
+	Type: Dedicated Server

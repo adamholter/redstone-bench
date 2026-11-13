@@ -6,6 +6,7 @@ window or weekly reset when it does not, and stop when every config has all 16 t
 
 One worker by default: a run that hits the quota mid-way is thrown out and redone, so fewer runs in flight waste less.
 """
+import calendar
 import json
 import os
 import pathlib
@@ -60,6 +61,24 @@ def usage():
     return wp, kp, wait
 
 
+def probe_reset():
+    """One tiny call. None = it worked (room), seconds = 429 with a reset time, "error" = anything else."""
+    with tempfile.TemporaryDirectory() as d:
+        try:
+            out = subprocess.run([str(MUSE), "exec", "--json", "--model", "muse-spark-1.2", "--effort", "minimal",
+                                  "--contributor-mode", "on", "--disable-web-tools", "--no-foreign-personal-context", "Reply ok."],
+                                 capture_output=True, text=True, timeout=180, cwd=d).stdout
+        except (OSError, subprocess.TimeoutExpired):
+            return "error"
+    m = re.search(r"resets at (\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ)", out)
+    if m:
+        t = calendar.timegm(time.strptime(m.group(1), "%Y-%m-%dT%H:%M:%SZ"))
+        return max(60, int(t - time.time()))
+    if '"terminal":"completed"' in out:
+        return None
+    return "error"
+
+
 def main():
     while True:
         todo = missing()
@@ -72,10 +91,18 @@ def main():
             return 0
         u = usage()
         if u is None:
-            log("could not read muse usage; retry in 10 min")
-            (B / "status.json").write_text(json.dumps(status | {"state": "usage unreadable"}, indent=1))
-            time.sleep(600)
-            continue
+            # a new subscription reports no usage until its first use; Muse's own 429 says when the window resets
+            r = probe_reset()
+            if r is None:
+                log("muse usage unreadable; probe shows room or no reset time, running the batch")
+                u = (0, 0, 0)
+            elif r == "error":
+                log("muse probe failed for another reason; retry in 10 min")
+                (B / "status.json").write_text(json.dumps(status | {"state": "probe error"}, indent=1))
+                time.sleep(600)
+                continue
+            else:
+                u = (100, 100, r)
         wp, kp, wait = u
         if wait:
             nap = min(wait + 300, 3600)          # recheck at least hourly
