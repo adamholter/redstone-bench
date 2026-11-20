@@ -24,8 +24,10 @@ MODELS = {"sol62": "gpt-6.2-sol", "astra62": "gpt-6.2-astra",
           "sol": "gpt-6.1-sol", "terra": "gpt-6.1-terra", "astra": "gpt-6-astra", "luna": "gpt-6-luna",
           "neon": "gemini-4-neon", "carbon": "gemini-4-carbon", "opus55": "claude-opus-5-5", "grok": "grok-4.7",
           "wonder-full": "muse-wonder-full-1.0", "wonder": "muse-wonder-1.0", "ember": "muse-ember-1.0",
-          "spark13": "muse-spark-1.3", "spark12": "muse-spark-1.2"}
-AGY = {"carbon", "neon"}                # these run through the Antigravity CLI (agy) instead of Codex
+          "spark13": "muse-spark-1.3", "spark12": "muse-spark-1.2", "glm53": "opencode-go/glm-5.3",
+          "dsflash41": "opencode-go/deepseek-v4.1-flash"}
+OPENCODE = {"glm53", "dsflash41"}                    # these run through the opencode CLI (opencode run) on the OpenCode Go subscription
+AGY = {"carbon", "neon"}              # these run through the Antigravity CLI (agy) instead of Codex
 CLAUDE = {"opus55"}                     # these run through the Claude Code CLI (claude) on Max subscription
 CURSOR = {"grok"}                      # these run through the Cursor CLI (cursor-agent)
 MUSE = {"wonder-full", "wonder", "ember", "spark13", "spark12"}   # these run through the Muse CLI (muse exec)
@@ -154,6 +156,88 @@ def muse_events(d, t):
         if p.get("terminal") == "completed":
             return "done", {"usage": None, "final": p.get("text") or ""}
         return "error", {"text": json.dumps(p)[:600]}
+    return None, None
+
+
+OPENCODE_BIN = pathlib.Path.home() / ".local/share/mise/installs/opencode/latest/node_modules/.bin/opencode"
+# opencode has no network-off switch: web, sub-agent, skill and outside-folder tools are denied, every command audited
+OPENCODE_CONFIG = {"$schema": "https://opencode.ai/config.json", "autoupdate": False, "share": "disabled",
+                   "mcp": {}, "plugin": [], "instructions": [],
+                   "permission": {"webfetch": "deny", "websearch": "deny", "codesearch": "deny", "task": "deny",
+                                  "skill": "deny", "external_directory": "deny", "doom_loop": "allow",
+                                  "bash": "allow", "edit": "allow", "read": "allow"}}
+
+
+def opencode_setup(tag, ws):
+    """A fresh HOME under the shared sandbox profile (no user config, AGENTS.md, skills, MCP servers or sessions).
+    Its database is a copy of the real one's schema plus only the OpenCode Console sign-in row."""
+    import sqlite3
+    home = AGY_HOMES / tag
+    shutil.rmtree(home, ignore_errors=True)
+    home, prof = agy_setup(tag, ws, links=[])
+    # opencode needs no Keychain, so unlike the shared profile it gets no ~/Library and only the mise installs from
+    # ~/.local (DeepSeek runs went looking for a Minecraft launcher there and ran private servers from its files)
+    (home / "Library").unlink(missing_ok=True)
+    real = pathlib.Path.home()
+    shared = '(subpath "/private/tmp") (subpath "/private/var/folders")'
+    prof.write_text(f'''(version 1)
+(allow default)
+(deny file-read* (subpath "{real}") {shared})
+(allow file-read-metadata (subpath "{real}") {shared})
+(allow file-read* (subpath "{real}/.local/share/mise") (subpath "{real}/.local/bin") (subpath "{home}") (subpath "{ws}"))
+(deny file-write* (subpath "{real}") {shared})
+(allow file-read* file-write* (regex #"^/private/var/folders/[^/]+/[^/]+/T/xcrun_db"))
+(allow file-write* (subpath "{home}") (subpath "{ws}"))
+''')
+    data = home / ".local/share/opencode"
+    data.mkdir(parents=True, exist_ok=True)
+    src = sqlite3.connect(f"file:{pathlib.Path.home() / '.local/share/opencode/opencode.db'}?mode=ro", uri=True)
+    dst = sqlite3.connect(data / "opencode.db")
+    for (sql,) in src.execute("select sql from sqlite_master where sql is not null and name not like 'sqlite_%' "
+                              "order by type='index'"):
+        dst.execute(sql)
+    for t in ("__drizzle_migrations", "migration"):
+        rows = src.execute(f'select * from "{t}"').fetchall()
+        if rows:
+            dst.executemany(f'insert into "{t}" values ({",".join("?" * len(rows[0]))})', rows)
+    cred = src.execute("select * from credential where integration_id = 'opencode' and active = 1").fetchall()
+    dst.executemany(f'insert into credential values ({",".join("?" * len(cred[0]))})', cred)
+    dst.commit()
+    dst.close()
+    src.close()
+    return home, prof
+
+
+def opencode_drop(home):
+    """Remove the copied sign-in; the database holds nothing else of the user's."""
+    for f in (home / ".local/share/opencode").glob("opencode.db*"):
+        f.unlink()
+    agy_drop(home)
+
+
+def opencode_events(d, t):
+    """opencode run --format json as the same (kind, payload) the other runners give. Each model step ends with
+    its own step_finish carrying that step's tokens, so usage is summed per step and "done" comes at the end."""
+    typ = d.get("type")
+    p = d.get("part") or {}
+    if typ == "tool_use" and (p.get("state") or {}).get("status") in ("completed", "error"):
+        st = p["state"]
+        inp = st.get("input") or {}
+        name = p.get("tool") or "tool"
+        cmd = inp.get("command") or f"[{name}] " + json.dumps(inp)[:200]
+        return "command", {"command": str(cmd), "tool": name, "output": str(st.get("output") or st.get("error") or "")[:300]}
+    if typ == "step_finish":
+        tk = p.get("tokens") or {}
+        cache = tk.get("cache") or {}
+        return "step", {"reason": p.get("reason"), "usage": {
+            "input_tokens": (tk.get("input") or 0) + (cache.get("read") or 0) + (cache.get("write") or 0),
+            "cached_input_tokens": cache.get("read") or 0,
+            "output_tokens": (tk.get("output") or 0) + (tk.get("reasoning") or 0),
+            "reasoning_output_tokens": tk.get("reasoning") or 0}}
+    if typ == "text":
+        return "text", {"text": p.get("text") or ""}
+    if typ == "error":
+        return "error", {"text": json.dumps(d.get("error") or d)[:600]}
     return None, None
 
 
@@ -589,8 +673,10 @@ def main():
     cla = a.model in CLAUDE
     cur = a.model in CURSOR
     mus = a.model in MUSE
-    sx = agy or cla or cur or mus        # sandboxed runners with a translated event stream
-    events = muse_events if mus else agy_events if agy else claude_events if cla else cursor_events
+    oc = a.model in OPENCODE
+    sx = agy or cla or cur or mus or oc        # sandboxed runners with a translated event stream
+    events = (muse_events if mus else agy_events if agy else claude_events if cla else opencode_events if oc
+              else cursor_events)
     argv = ["codex", "exec", "-m", MODELS[a.model], "-c", f'model_reasoning_effort="{a.effort}"',
             "-c", 'web_search="disabled"', "-c", 'approval_policy="never"',
             *[x for f in ("plugins", "apps", "memories", "image_generation") for x in ("--disable", f)],
@@ -639,6 +725,18 @@ def main():
                 "--trust-workspace", "--disable-approval", "--disable-request-user-input", "--disable-web-tools",
                 "--disable-reminders", "--no-foreign-personal-context", "--contributor-mode", "on",
                 "--disable-sandbox", "Read TASK.md in this folder and do the task."]
+    if oc:
+        # a fresh HOME (no user config, AGENTS.md, skills, plugins or MCP servers) inside the shared sandbox profile;
+        # a private server (--standalone), not the user's background service. Web, sub-agent and skill tools and any
+        # path outside the workspace are denied in the inline config, and every command is audited.
+        home, prof = opencode_setup(f"{cfg}__{name}", ws)
+        env = {"PATH": os.environ["PATH"], "HOME": str(home), "SHELL": "/bin/zsh", "TMPDIR": str(home / "tmp"),
+               "TMPPREFIX": str(home / "tmp/zsh"), "LANG": "en_US.UTF-8",
+               "OPENCODE_CONFIG_CONTENT": json.dumps(OPENCODE_CONFIG), "OPENCODE_DISABLE_AUTOUPDATE": "1",
+               "OPENCODE_DISABLE_CLAUDE_CODE": "1", "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
+               "OPENCODE_DISABLE_MODELS_FETCH": "1"}
+        argv = ["sandbox-exec", "-f", str(prof), str(OPENCODE_BIN), "run", "--standalone", "--format", "json",
+                "--archived", "--auto", "-m", f"{MODELS[a.model]}#{a.effort}", "Read TASK.md in this folder and do the task."]
     t0, started = time.time(), time.strftime("%Y-%m-%dT%H:%M:%S%z")
     threading.Thread(target=serve, daemon=True).start()
     def pump(proc):
@@ -688,6 +786,8 @@ def main():
             muse_drop(home)     # never leave the copied sign-in behind in a home no run will clean
         elif cla:
             claude_drop(home)
+        elif oc:
+            opencode_drop(home)
         raise
     (out / "codex.pid").write_text(str(proc.pid))
     pumper = threading.Thread(target=pump, args=(proc,), daemon=True)
@@ -719,6 +819,11 @@ def main():
                 state["fault"] = "provider ended the run: " + x["text"][:200]
             elif k == "usage":
                 usage = x["usage"]
+            elif k == "step":       # opencode: tokens per model step, summed; the run is done if the last step stopped
+                usage = {f: (usage.get(f) or 0) + (v or 0) for f, v in x["usage"].items()}
+                saw_done = x["reason"] == "stop"
+            elif k == "text":
+                final = x["text"]
             elif k == "done":
                 saw_done = True
                 usage, final = x["usage"] or usage, x["final"]
@@ -749,11 +854,13 @@ def main():
         muse_drop(home)
     elif cla:
         claude_drop(home)
+    elif oc:
+        opencode_drop(home)
     elif sx:
         agy_drop(home)
     if agy and "blocked by Gemini's filters" in final:     # the provider cut the run off; not a model result
         state["fault"] = "provider safety filter ended the run"
-    if (mus or cla) and ended == "finished" and not saw_done and not state.get("fault"):
+    if (mus or cla or oc) and ended == "finished" and not saw_done and not state.get("fault"):
         state["fault"] = "CLI exited without a completed terminal event"   # crash after the usage event
     if shutil.disk_usage(out).free < 1 << 30:
         state["fault"] = state.get("fault") or "disk nearly full during the run"
@@ -791,6 +898,7 @@ def main():
               "harness": {"cli": "agy " + sh(str(pathlib.Path.home() / ".local/bin/agy"), "--version") if agy else
                           "claude " + sh(str(pathlib.Path.home() / ".local/bin/claude"), "--version") if cla else
                           "cursor-agent " + sh(str(pathlib.Path.home() / ".local/bin/cursor-agent"), "--version") if cur else
+                          "opencode " + sh(str(OPENCODE_BIN), "--version") if oc else
                           sh(str(muse_bin), "--version") if mus else sh("codex", "--version"), "git": sh("git", "rev-parse", "--short", "HEAD"),
                           "git_dirty": bool(sh("git", "status", "--porcelain", "bench", "tasks")), "minecraft": "26.3 vanilla"}}
     if best:

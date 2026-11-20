@@ -30,7 +30,8 @@ BLURB = {
 }
 MODELS = {"sol62": "GPT-6.2 Sol", "astra62": "GPT-6.2 Astra", "sol": "GPT-6.1 Sol", "terra": "GPT-6.1 Terra", "astra": "GPT-6 Astra", "luna": "GPT-6 Luna",
           "neon": "Gemini 4 Neon", "carbon": "Gemini 4 Carbon", "opus55": "Claude Opus 5.5", "grok": "Grok 4.7",
-          "wonder-full": "Muse Wonder Full 1.0", "wonder": "Muse Wonder 1.0", "ember": "Muse Ember 1.0", "spark13": "Muse Spark 1.3", "spark12": "Muse Spark 1.2"}
+          "wonder-full": "Muse Wonder Full 1.0", "wonder": "Muse Wonder 1.0", "ember": "Muse Ember 1.0", "spark13": "Muse Spark 1.3", "spark12": "Muse Spark 1.2",
+          "glm53": "GLM 5.3", "dsflash41": "DeepSeek V4.1 Flash"}
 EFFORTS = ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
 
 

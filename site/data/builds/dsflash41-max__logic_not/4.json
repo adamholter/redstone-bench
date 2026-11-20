@@ -1,0 +1,1 @@
+{"volume":4,"dims":[4,1,1],"ticks":5,"blocks":4,"entities":0,"bounds":[[0,0,0],[3,0,0]],"states":{"rest":[{"pos":[0,0,0],"state":"minecraft:lever[face=wall,facing=west,powered=true]"},{"pos":[1,0,0],"state":"minecraft:stone"},{"pos":[2,0,0],"state":"minecraft:redstone_wall_torch[facing=east,lit=false]"},{"pos":[3,0,0],"state":"minecraft:redstone_lamp[lit=false]"}]}}
